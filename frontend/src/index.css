@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { scroll-behavior: smooth; }
+  body { @apply bg-studio-black text-white antialiased; }
+
+  ::selection {
+    background-color: rgba(212, 175, 55, 0.3);
+    color: #fff;
+  }
+}
+
+@layer components {
+  .gold-text {
+    @apply bg-gold-gradient bg-clip-text text-transparent;
+    background-size: 200% auto;
+  }
+
+  .gold-border {
+    @apply border border-gold/30;
+  }
+
+  .card-studio {
+    @apply bg-studio-card rounded-2xl border border-studio-border
+           shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-sm;
+  }
+
+  .btn-gold {
+    @apply inline-flex items-center gap-2 px-6 py-3
+           bg-gold-gradient text-black font-semibold rounded-full
+           hover:shadow-[0_0_20px_rgba(212,175,55,0.4)]
+           transition-all duration-300 active:scale-95;
+    background-size: 200% auto;
+  }
+
+  .btn-outline-gold {
+    @apply inline-flex items-center gap-2 px-6 py-3
+           border border-gold/60 text-gold font-medium rounded-full
+           hover:bg-gold/10 hover:border-gold
+           transition-all duration-300 active:scale-95;
+  }
+
+  .nav-link {
+    @apply text-white/70 hover:text-gold text-sm font-medium
+           tracking-wider uppercase transition-colors duration-200;
+  }
+
+  .input-studio {
+    @apply w-full bg-studio-muted border border-studio-border rounded-xl
+           px-4 py-3 text-white placeholder:text-white/30
+           focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/20
+           transition-all duration-200;
+  }
+
+  .waveform-bar {
+    @apply w-0.5 bg-gold rounded-full origin-bottom;
+    animation: waveform 1s ease-in-out infinite;
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+}
