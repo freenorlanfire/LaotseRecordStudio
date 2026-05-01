@@ -1,114 +1,243 @@
 # CONTEXT — Lao-tse Records Studio
+> Última actualización: 2026-05-01
+
+---
 
 ## ¿Qué es este proyecto?
 
-**Lao-tse Records Studio** es la plataforma digital oficial del sello discográfico Lao-tse Records. Funciona simultáneamente como:
+**Lao-tse Records Studio** es la plataforma digital oficial del sello discográfico Lao-tse Records. Funciona como:
 
-1. **Red social musical** ("El Muro") — donde artistas, productores y fans comparten contenido, audios e imágenes.
-2. **Catálogo de streaming** — archivo oficial de todas las producciones del sello.
+1. **Red social musical** ("El Muro") — artistas, productores y fans comparten posts con audio e imagen.
+2. **Catálogo de streaming** — archivo oficial de todas las producciones del sello con player global.
 3. **Vitrina de servicios** — Producción, Abogacía Musical, Distribución y Coaching.
 4. **Agenda de eventos** — Conciertos, lanzamientos y showcases.
 
 ---
 
-## Decisiones de arquitectura
+## Stack Técnico
 
-### Binario único (Go sirve el SPA)
-
-El backend Go construye y sirve el build estático de React. Esto simplifica el despliegue en Railway a un solo servicio con un solo Dockerfile. En producción no hay servidor Node separado.
-
-- Rutas `/api/*` → controladores Go
-- Cualquier otra ruta → `frontend/dist/index.html` (React Router toma el control)
-
-### PostgreSQL relacional
-
-Se eligió PostgreSQL sobre una base de datos NoSQL porque:
-- El muro social requiere JOINs eficientes (post + author)
-- Los likes necesitan integridad referencial (tabla `post_likes` con PK compuesto)
-- El catálogo de tracks tiene relaciones claras con artistas
-- Railway ofrece PostgreSQL como plugin nativo con conexión automática
-
-### JWT stateless
-
-Autenticación sin sesiones en servidor. Los tokens duran 72 horas. El frontend los guarda en `localStorage` con la clave `ltr_token`. El store de Zustand persiste `user` y `token` en `localStorage` vía `persist` middleware.
-
-### Zustand para estado global
-
-Dos stores principales:
-- **`authStore`**: usuario, token, login/logout. Persiste en `localStorage`.
-- **`playerStore`**: cola de reproducción, índice, `isPlaying`, volumen. **No persiste** (se reinicia al refrescar, es correcto para un player de audio).
-
-El `GlobalPlayer` es un componente fijo en el DOM que nunca se desmonta, garantizando reproducción continua entre navegaciones.
-
-### URLs de media (CDN-ready)
-
-Los archivos de audio y fotos se almacenan como URLs en la base de datos. Esto permite integrar cualquier CDN (Cloudinary, Supabase Storage, AWS S3) sin cambios en la lógica de negocio — solo cambia la URL que se guarda.
+| Capa | Tecnología | Versión |
+|------|------------|---------|
+| Backend | Go + chi router | 1.22 |
+| Base de datos | PostgreSQL | 16 (Railway) |
+| Frontend | React + Vite | 18.3 |
+| Estilos | Tailwind CSS | 3.4 |
+| Animaciones | Framer Motion | 11 |
+| Estado global | Zustand | 4.5 |
+| Auth | JWT HS256 | 72h TTL |
+| Deploy | Railway (Docker) | — |
 
 ---
 
-## Flujo de autenticación
+## Repositorio GitHub
 
 ```
-Usuario → POST /api/auth/login
-        ← { token, user }
-        → localStorage.setItem('ltr_token', token)
-        → authStore.setState({ user, token })
+https://github.com/freenorlanfire/LaotseRecordStudio.git
+```
+Branch principal: `main` → Railway autodespliega en cada push.
 
-Peticiones autenticadas:
-        → Header: Authorization: Bearer <token>
-        → middleware/auth.go valida JWT
-        → Inyecta userID y role en context
+---
+
+## Variables de Entorno (Railway)
+
+| Variable | Valor en producción |
+|----------|---------------------|
+| `DATABASE_URL` | `postgresql://postgres:***@postgres.railway.internal:5432/railway` |
+| `JWT_SECRET` | String aleatorio base64 (32 bytes) |
+| `ENV` | `production` |
+| `PORT` | Inyectado automáticamente por Railway |
+
+> ⚠️ Nunca subir `.env` al repositorio. Está en `.gitignore`.
+
+---
+
+## API — Todos los Endpoints
+
+### Health
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/api/health` | — | Status del servidor y DB |
+
+### Auth
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| POST | `/api/auth/register` | — | Registro de usuario |
+| POST | `/api/auth/login` | — | Login → JWT |
+| GET | `/api/auth/me` | ✅ | Perfil propio |
+| PUT | `/api/auth/profile` | ✅ | Actualizar avatar_url y bio |
+
+### Users
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/api/users/:username` | — | Perfil público por username |
+| GET | `/api/users` | admin | Listar todos los usuarios |
+| PATCH | `/api/users/:id/role` | admin | Cambiar rol de usuario |
+
+### Posts (El Muro)
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/api/posts?page=1` | Opcional | Feed paginado (20/página) |
+| GET | `/api/posts/:id` | Opcional | Post individual |
+| POST | `/api/posts` | ✅ | Crear post |
+| POST | `/api/posts/:id/like` | ✅ | Toggle like |
+| DELETE | `/api/posts/:id` | ✅ | Borrar (propio o admin) |
+
+### Tracks (Catálogo)
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/api/tracks?page=1&genre=X&q=búsqueda` | — | Catálogo paginado |
+| GET | `/api/tracks/:id` | — | Track individual |
+| POST | `/api/tracks` | artist/admin | Subir track |
+| PUT | `/api/tracks/:id` | artist/admin | Editar track |
+| POST | `/api/tracks/:id/play` | — | Incrementar play count |
+| DELETE | `/api/tracks/:id` | ✅ | Eliminar (propio o admin) |
+
+### Events
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/api/events` | — | Próximos eventos |
+| GET | `/api/events/:id` | — | Evento individual |
+| POST | `/api/events` | admin | Crear evento |
+| PUT | `/api/events/:id` | admin | Editar evento |
+| DELETE | `/api/events/:id` | admin | Eliminar evento |
+
+### Contact
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| POST | `/api/contact` | — | Enviar formulario de contacto |
+| GET | `/api/contacts` | admin | Ver todos los mensajes |
+
+---
+
+## Roles de usuario
+
+| Rol | Permisos |
+|-----|----------|
+| `client` | Leer, postear en el muro, dar likes |
+| `artist` | Todo de client + subir y editar sus tracks |
+| `admin` | Control total — también puede cambiar roles vía API |
+
+Para promover a alguien a admin, ejecutar en Railway → Postgres → Query:
+```sql
+UPDATE users SET role='admin' WHERE email='tu@email.com';
 ```
 
 ---
 
-## Modelo de datos simplificado
+## Historial de fixes de Deploy
+
+| Commit | Problema | Solución |
+|--------|----------|----------|
+| `fix: add go.sum` | `go.sum` no estaba en el repo | `go mod tidy` + push |
+| `fix: use npm install` | `npm ci` requiere `package-lock.json` | Cambiar a `npm install` |
+| `fix: downgrade React 18` | React 19 peer deps conflict | Bajar a React 18.3.1 |
+| `fix: vite build only` | `tsc -b` bloqueaba por imports no usados | Solo `vite build`, tsconfig relajado |
+| `fix: add /api/health` | Healthcheck Railway fallaba con 404 | Crear endpoint `/api/health` |
+| `feat: all endpoints` | Endpoints faltantes en router | Agregar users, events CRUD, contacts list |
+
+---
+
+## Arquitectura — Patrón de binario único
 
 ```
-users ──┬──< posts ──< post_likes
-        │
-        └──< tracks
+Railway
+  └── Go binary (./server)
+        ├── /api/*         → handlers Go + PostgreSQL
+        └── /*             → frontend/dist/ (React SPA)
+                               └── index.html (fallback SPA routing)
+```
 
-events (standalone)
-contacts (standalone)
+El Dockerfile tiene 3 stages:
+1. **frontend-builder** (node:20-alpine) → `npm install + vite build`
+2. **go-builder** (golang:1.22-alpine) → `go build -o server`
+3. **final** (alpine:3.19) → copia `server` + `frontend/dist`
+
+---
+
+## Estructura del proyecto
+
+```
+LaotseRecordStudio/
+├── main.go                    ← Entry point, graceful shutdown
+├── go.mod / go.sum
+├── Dockerfile                 ← Multi-stage build
+├── railway.toml               ← Config Railway (healthcheck, restart)
+├── .env.example               ← Template de variables
+├── .gitignore
+├── README.md
+├── CONTEXT.md                 ← Este archivo
+├── ARCHITECTURE.md            ← Diagramas y decisiones técnicas
+│
+├── internal/
+│   ├── config/config.go       ← Load() desde env vars
+│   ├── database/database.go   ← pgxpool + schema SQL (CREATE IF NOT EXISTS)
+│   ├── models/models.go       ← Structs Go + DTOs request/response
+│   ├── handlers/
+│   │   ├── helpers.go         ← respondJSON(), respondError()
+│   │   ├── auth.go            ← Register, Login, Me, UpdateProfile
+│   │   ├── users.go           ← GetByUsername, List, UpdateRole
+│   │   ├── posts.go           ← List, GetOne, Create, ToggleLike, Delete
+│   │   ├── tracks.go          ← List, GetOne, Create, Update, Play, Delete
+│   │   └── events.go          ← Events CRUD + Contact handlers
+│   ├── middleware/auth.go      ← Authenticate, OptionalAuth, RequireRole
+│   └── router/router.go       ← chi routes + SPA fallback + /api/health
+│
+└── frontend/src/
+    ├── App.tsx                 ← BrowserRouter + 5 rutas
+    ├── index.css               ← Tailwind + custom components layer
+    ├── lib/api.ts              ← fetch wrapper tipado + todos los types
+    ├── store/
+    │   ├── authStore.ts        ← Zustand persisted (user, token)
+    │   └── playerStore.ts      ← Zustand efímero (queue, isPlaying)
+    ├── components/
+    │   ├── Layout/Navbar.tsx   ← Scroll-aware, mobile, auth badge
+    │   ├── Layout/GlobalPlayer.tsx ← Player fijo, nunca se desmonta
+    │   └── Auth/LoginModal.tsx ← Login/Register con ojo + validaciones
+    └── pages/
+        ├── Home.tsx            ← Hero + featured tracks + servicios
+        ├── FeedPage.tsx        ← Muro social con likes y audio inline
+        ├── CatalogPage.tsx     ← Tabla + cards + filtro género + búsqueda
+        ├── EventsPage.tsx      ← Agenda con fechas y tickets
+        └── ServicesPage.tsx    ← 4 servicios + formulario de contacto
 ```
 
 ---
 
-## Variables de entorno necesarias
+## Cómo agregar funcionalidades
 
-| Variable | Obligatoria | Descripción |
-|----------|-------------|-------------|
-| `DATABASE_URL` | ✅ | Cadena de conexión PostgreSQL |
-| `JWT_SECRET` | ✅ | Clave para firmar tokens JWT |
-| `PORT` | No (default: 8080) | Puerto del servidor HTTP |
-| `ENV` | No (default: development) | `development` o `production` |
+### Nuevo endpoint backend
+1. Handler en `internal/handlers/nombre.go`
+2. Registrar ruta en `internal/router/router.go`
+3. Si hay nuevo modelo: `internal/models/models.go`
+4. Si hay nueva tabla: añadir al `schema` en `internal/database/database.go`
+
+### Nueva página frontend
+1. Crear `frontend/src/pages/NuevaPagina.tsx`
+2. Añadir `<Route>` en `frontend/src/App.tsx`
+3. Añadir link en el array `LINKS` de `Navbar.tsx`
+4. Si llama a la API: añadir método en `frontend/src/lib/api.ts`
+
+### Workflow de deploy
+```bash
+# Desarrollar localmente
+cd frontend && npm run dev   # en terminal 1
+go run .                     # en terminal 2
+
+# Subir cambios → Railway autodespliega
+git add -A
+git commit -m "feat/fix: descripción"
+git push origin main
+```
 
 ---
 
-## Convenciones de código
+## Backlog sugerido
 
-### Backend (Go)
-- Package per layer: `config`, `database`, `models`, `handlers`, `middleware`, `router`
-- Handlers retornan siempre `{ success: bool, data?: any, error?: string }`
-- Errores de BD no se exponen al cliente (mensajes genéricos)
-- Migraciones inline en `database.go` con `CREATE TABLE IF NOT EXISTS`
-
-### Frontend (React)
-- Un archivo por componente/página, sin barrel exports innecesarios
-- `api.ts` como único punto de contacto con el backend
-- Tailwind con tokens custom (`gold`, `studio-*`) definidos en `tailwind.config.js`
-- Clases utility reutilizables en `index.css` como `@layer components`
-
----
-
-## Próximas funcionalidades (backlog sugerido)
-
-- [ ] Upload directo a Cloudinary (firma en backend, upload desde frontend)
-- [ ] Perfil de artista (`/artist/:username`) con discografía
+- [ ] Upload directo de audio/imagen a Cloudinary (firma backend)
+- [ ] Perfil público de artista con discografía completa
 - [ ] Sistema de comentarios en posts
-- [ ] Dashboard admin (estadísticas, gestión de usuarios)
-- [ ] Notificaciones en tiempo real (WebSockets o SSE)
-- [ ] Player con modo shuffle y repeat
-- [ ] Suscripción/Follow entre usuarios
-- [ ] Integración con Spotify para cruzar datos de streams
+- [ ] Dashboard admin con métricas (plays, likes, usuarios)
+- [ ] Notificaciones en tiempo real (WebSockets)
+- [ ] Player con shuffle, repeat, cola editable
+- [ ] Sistema de followers entre usuarios
+- [ ] Integración Stripe para tickets de eventos
