@@ -1,4 +1,5 @@
-const BASE = '/api'
+export const API_BASE = '/api'
+const BASE = API_BASE
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('ltr_token')

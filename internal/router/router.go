@@ -106,6 +106,9 @@ func New(db *database.DB, jwtSecret string) http.Handler {
 		// ── Contact / Servicios ──────────────────────────────
 		r.Post("/contact",                        contactHandler.Submit)
 		r.With(auth, adminOnly).Get("/contacts",  contactHandler.List) // admin: ver mensajes
+
+		// ── Upload (firma Cloudinary) ─────────────────────────
+		r.With(auth, adminOrArtist).Post("/upload/sign", handlers.UploadSign)
 	})
 
 	// ── SPA fallback ─────────────────────────────────────────
