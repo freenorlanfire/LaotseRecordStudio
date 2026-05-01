@@ -1,7 +1,11 @@
-# Environment
+# Environment & secrets
 .env
 .env.local
 *.env
+API keys/
+*apikey*
+*api_key*
+*.key
 
 # Go
 /server
