@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/laotse-records/studio/internal/database"
-	"github.com/laotse-records/studio/internal/middleware"
 	"github.com/laotse-records/studio/internal/models"
 )
 
