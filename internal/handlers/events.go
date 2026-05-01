@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/laotse-records/studio/internal/database"
+	"github.com/laotse-records/studio/internal/email"
 	"github.com/laotse-records/studio/internal/models"
 )
 
@@ -113,9 +115,14 @@ func (h *EventsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // ── Contact ──────────────────────────────────────────────────────────────────
 
-type ContactHandler struct{ db *database.DB }
+type ContactHandler struct {
+	db    *database.DB
+	email *email.Client
+}
 
-func NewContactHandler(db *database.DB) *ContactHandler { return &ContactHandler{db: db} }
+func NewContactHandler(db *database.DB) *ContactHandler {
+	return &ContactHandler{db: db, email: email.NewClient()}
+}
 
 // POST /api/contact
 func (h *ContactHandler) Submit(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +135,8 @@ func (h *ContactHandler) Submit(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "name, email and message required")
 		return
 	}
+
+	// 1. Guardar en base de datos
 	_, err := h.db.Pool.Exec(r.Context(),
 		`INSERT INTO contacts(name,email,service,message) VALUES($1,$2,$3,$4)`,
 		req.Name, req.Email, req.Service, req.Message)
@@ -135,7 +144,21 @@ func (h *ContactHandler) Submit(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "error saving contact")
 		return
 	}
-	respondJSON(w, http.StatusCreated, map[string]string{"message": "Thank you, we'll be in touch soon."})
+
+	// 2. Enviar email de notificación (async, no bloquea la respuesta)
+	service := ""
+	if req.Service != nil {
+		service = *req.Service
+	}
+	go func() {
+		if err := h.email.SendContactNotification(req.Name, req.Email, service, req.Message); err != nil {
+			log.Printf("email notification failed: %v", err)
+		}
+	}()
+
+	respondJSON(w, http.StatusCreated, map[string]string{
+		"message": "¡Mensaje recibido! Nos pondremos en contacto contigo pronto.",
+	})
 }
 
 // GET /api/contacts — admin only

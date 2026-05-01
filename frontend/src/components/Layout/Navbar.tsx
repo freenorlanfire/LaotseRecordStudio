@@ -44,14 +44,21 @@ export function Navbar() {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
 
-          {/* Logo — imagen real */}
+          {/* Logo — imagen oval */}
           <Link to="/" className="flex items-center group">
-            <img
-              src="/img/LaotseRecordStudio-1.jpg"
-              alt="Lao-tse Records"
-              className="h-10 w-auto object-contain
-                         transition-all duration-300 group-hover:brightness-110"
-            />
+            <div className="relative h-12 w-20 overflow-hidden transition-all duration-300
+                            group-hover:scale-105"
+                 style={{
+                   borderRadius: '50%',
+                   boxShadow: '0 0 18px rgba(200,150,12,0.35), 0 0 1px rgba(200,150,12,0.6)',
+                   border: '1px solid rgba(200,150,12,0.3)',
+                 }}>
+              <img
+                src="/img/Lao-tse Records.jpg"
+                alt="Lao-tse Records"
+                className="w-full h-full object-cover object-center scale-110"
+              />
+            </div>
           </Link>
 
           {/* Desktop nav */}
