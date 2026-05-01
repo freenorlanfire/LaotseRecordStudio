@@ -44,6 +44,10 @@ func New(db *database.DB, jwtSecret string) http.Handler {
 
 	r.Route("/api", func(r chi.Router) {
 
+		// ── Docs (Swagger UI) ────────────────────────────────
+		r.Get("/docs",         handlers.SwaggerUI)
+		r.Get("/swagger.json", handlers.OpenAPISpec)
+
 		// ── Health ───────────────────────────────────────────
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			// Also ping the DB

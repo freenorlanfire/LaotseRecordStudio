@@ -5,67 +5,86 @@
 @layer base {
   html { scroll-behavior: smooth; }
   body { @apply bg-studio-black text-white antialiased; }
-
-  ::selection {
-    background-color: rgba(212, 175, 55, 0.3);
-    color: #fff;
-  }
+  ::selection { background-color: rgba(200,150,12,0.35); color:#fff; }
 }
 
 @layer components {
+  /* Texto "RECORDS" en oro intenso */
   .gold-text {
-    @apply bg-gold-gradient bg-clip-text text-transparent;
+    background: linear-gradient(135deg, #C8960C 0%, #F0CD60 45%, #A87A08 100%);
     background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 
-  .gold-border {
-    @apply border border-gold/30;
+  /* Texto "Lao-tse" siempre blanco */
+  .script-white {
+    color: #ffffff;
+    text-shadow: 0 0 40px rgba(255,255,255,0.15);
   }
+
+  .gold-border { @apply border border-gold/30; }
 
   .card-studio {
     @apply bg-studio-card rounded-2xl border border-studio-border
-           shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-sm;
+           shadow-[0_0_40px_rgba(0,0,0,0.9)] backdrop-blur-sm;
   }
 
   .btn-gold {
     @apply inline-flex items-center gap-2 px-6 py-3
-           bg-gold-gradient text-black font-semibold rounded-full
-           hover:shadow-[0_0_20px_rgba(212,175,55,0.4)]
+           font-semibold rounded-full text-black
            transition-all duration-300 active:scale-95;
+    background: linear-gradient(135deg, #C8960C 0%, #E8B800 50%, #A87A08 100%);
     background-size: 200% auto;
+    box-shadow: 0 4px 20px rgba(200,150,12,0.3);
+  }
+  .btn-gold:hover {
+    box-shadow: 0 4px 30px rgba(200,150,12,0.55);
+    background-position: right center;
   }
 
   .btn-outline-gold {
     @apply inline-flex items-center gap-2 px-6 py-3
-           border border-gold/60 text-gold font-medium rounded-full
-           hover:bg-gold/10 hover:border-gold
+           border font-medium rounded-full
            transition-all duration-300 active:scale-95;
+    border-color: rgba(200,150,12,0.5);
+    color: #C8960C;
+  }
+  .btn-outline-gold:hover {
+    background: rgba(200,150,12,0.1);
+    border-color: #C8960C;
   }
 
   .nav-link {
-    @apply text-white/70 hover:text-gold text-sm font-medium
-           tracking-wider uppercase transition-colors duration-200;
+    @apply text-white/60 text-sm font-medium tracking-wider uppercase
+           transition-colors duration-200 hover:text-white;
   }
 
   .input-studio {
     @apply w-full bg-studio-muted border border-studio-border rounded-xl
-           px-4 py-3 text-white placeholder:text-white/30
-           focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/20
-           transition-all duration-200;
+           px-4 py-3 text-white placeholder:text-white/25
+           focus:outline-none transition-all duration-200;
+  }
+  .input-studio:focus {
+    border-color: rgba(200,150,12,0.5);
+    box-shadow: 0 0 0 2px rgba(200,150,12,0.1);
   }
 
   .waveform-bar {
-    @apply w-0.5 bg-gold rounded-full origin-bottom;
+    @apply w-0.5 rounded-full origin-bottom;
+    background: #C8960C;
     animation: waveform 1s ease-in-out infinite;
   }
 }
 
 @layer utilities {
   .text-balance { text-wrap: balance; }
-
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style:none; scrollbar-width:none; }
+  .scrollbar-hide::-webkit-scrollbar { display:none; }
 }
+
+/* scrollbar global */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: #000; }
+::-webkit-scrollbar-thumb { background: #C8960C; border-radius: 2px; }
