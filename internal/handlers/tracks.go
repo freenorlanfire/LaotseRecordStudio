@@ -19,6 +19,7 @@ func NewTracksHandler(db *database.DB) *TracksHandler {
 	return &TracksHandler{db: db}
 }
 
+// GET /api/tracks
 func (h *TracksHandler) List(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 1 {
@@ -27,62 +28,92 @@ func (h *TracksHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit := 24
 	offset := (page - 1) * limit
 	genre := r.URL.Query().Get("genre")
+	search := r.URL.Query().Get("q")
 
-	query := `
-		SELECT t.id, t.title, t.artist_id, t.album, t.genre, t.duration,
-		       t.file_url, t.cover_url, t.play_count, t.released_at, t.created_at,
-		       u.id, u.username, u.avatar_url
-		FROM tracks t
-		JOIN users u ON u.id = t.artist_id`
+	var rows interface{ Close() }
+	var err error
 
-	args := []interface{}{}
-	if genre != "" {
-		query += ` WHERE t.genre = $1`
-		args = append(args, genre)
-		query += ` ORDER BY t.created_at DESC LIMIT $2 OFFSET $3`
-		args = append(args, limit, offset)
+	if search != "" {
+		like := "%" + search + "%"
+		rows, err = h.db.Pool.Query(r.Context(), `
+			SELECT t.id,t.title,t.artist_id,t.album,t.genre,t.duration,
+			       t.file_url,t.cover_url,t.play_count,t.released_at,t.created_at,
+			       u.id,u.username,u.avatar_url
+			FROM tracks t JOIN users u ON u.id=t.artist_id
+			WHERE t.title ILIKE $1 OR u.username ILIKE $1
+			ORDER BY t.created_at DESC LIMIT $2 OFFSET $3`,
+			like, limit, offset)
+	} else if genre != "" {
+		rows, err = h.db.Pool.Query(r.Context(), `
+			SELECT t.id,t.title,t.artist_id,t.album,t.genre,t.duration,
+			       t.file_url,t.cover_url,t.play_count,t.released_at,t.created_at,
+			       u.id,u.username,u.avatar_url
+			FROM tracks t JOIN users u ON u.id=t.artist_id
+			WHERE t.genre=$1 ORDER BY t.created_at DESC LIMIT $2 OFFSET $3`,
+			genre, limit, offset)
 	} else {
-		query += ` ORDER BY t.created_at DESC LIMIT $1 OFFSET $2`
-		args = append(args, limit, offset)
+		rows, err = h.db.Pool.Query(r.Context(), `
+			SELECT t.id,t.title,t.artist_id,t.album,t.genre,t.duration,
+			       t.file_url,t.cover_url,t.play_count,t.released_at,t.created_at,
+			       u.id,u.username,u.avatar_url
+			FROM tracks t JOIN users u ON u.id=t.artist_id
+			ORDER BY t.created_at DESC LIMIT $1 OFFSET $2`,
+			limit, offset)
 	}
-
-	rows, err := h.db.Pool.Query(r.Context(), query, args...)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "error fetching tracks")
 		return
 	}
-	defer rows.Close()
+
+	pgRows := rows.(interface {
+		Close()
+		Next() bool
+		Scan(dest ...any) error
+	})
+	defer pgRows.Close()
 
 	tracks := make([]models.Track, 0)
-	for rows.Next() {
+	for pgRows.Next() {
 		var t models.Track
-		var artist models.User
-		if err := rows.Scan(
-			&t.ID, &t.Title, &t.ArtistID, &t.Album, &t.Genre, &t.Duration,
-			&t.FileURL, &t.CoverURL, &t.PlayCount, &t.ReleasedAt, &t.CreatedAt,
-			&artist.ID, &artist.Username, &artist.AvatarURL,
-		); err != nil {
+		var a models.User
+		if err := pgRows.Scan(&t.ID, &t.Title, &t.ArtistID, &t.Album, &t.Genre,
+			&t.Duration, &t.FileURL, &t.CoverURL, &t.PlayCount,
+			&t.ReleasedAt, &t.CreatedAt, &a.ID, &a.Username, &a.AvatarURL); err != nil {
 			continue
 		}
-		t.Artist = &artist
+		t.Artist = &a
 		tracks = append(tracks, t)
 	}
 
 	var total int
-	if genre != "" {
-		h.db.Pool.QueryRow(r.Context(), `SELECT COUNT(*) FROM tracks WHERE genre=$1`, genre).Scan(&total)
-	} else {
-		h.db.Pool.QueryRow(r.Context(), `SELECT COUNT(*) FROM tracks`).Scan(&total)
-	}
-
-	respondJSON(w, http.StatusOK, models.PaginatedResponse{
-		Items: tracks, Total: total, Page: page, Limit: limit,
-	})
+	h.db.Pool.QueryRow(r.Context(), `SELECT COUNT(*) FROM tracks`).Scan(&total)
+	respondJSON(w, http.StatusOK, models.PaginatedResponse{Items: tracks, Total: total, Page: page, Limit: limit})
 }
 
+// GET /api/tracks/:id
+func (h *TracksHandler) GetOne(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var t models.Track
+	var a models.User
+	err := h.db.Pool.QueryRow(r.Context(), `
+		SELECT t.id,t.title,t.artist_id,t.album,t.genre,t.duration,
+		       t.file_url,t.cover_url,t.play_count,t.released_at,t.created_at,
+		       u.id,u.username,u.avatar_url
+		FROM tracks t JOIN users u ON u.id=t.artist_id WHERE t.id=$1`, id,
+	).Scan(&t.ID, &t.Title, &t.ArtistID, &t.Album, &t.Genre, &t.Duration,
+		&t.FileURL, &t.CoverURL, &t.PlayCount, &t.ReleasedAt, &t.CreatedAt,
+		&a.ID, &a.Username, &a.AvatarURL)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "track not found")
+		return
+	}
+	t.Artist = &a
+	respondJSON(w, http.StatusOK, t)
+}
+
+// POST /api/tracks
 func (h *TracksHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID, _ := r.Context().Value(middleware.UserIDKey).(string)
-
 	var req models.CreateTrackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body")
@@ -92,42 +123,77 @@ func (h *TracksHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "title and file_url required")
 		return
 	}
-
-	var track models.Track
+	var t models.Track
 	err := h.db.Pool.QueryRow(r.Context(),
-		`INSERT INTO tracks (title, artist_id, album, genre, duration, file_url, cover_url, released_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-		 RETURNING id, title, artist_id, album, genre, duration, file_url, cover_url, play_count, released_at, created_at`,
+		`INSERT INTO tracks(title,artist_id,album,genre,duration,file_url,cover_url,released_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+		 RETURNING id,title,artist_id,album,genre,duration,file_url,cover_url,play_count,released_at,created_at`,
 		req.Title, userID, req.Album, req.Genre, req.Duration, req.FileURL, req.CoverURL, req.ReleasedAt,
-	).Scan(&track.ID, &track.Title, &track.ArtistID, &track.Album, &track.Genre, &track.Duration,
-		&track.FileURL, &track.CoverURL, &track.PlayCount, &track.ReleasedAt, &track.CreatedAt)
+	).Scan(&t.ID, &t.Title, &t.ArtistID, &t.Album, &t.Genre, &t.Duration,
+		&t.FileURL, &t.CoverURL, &t.PlayCount, &t.ReleasedAt, &t.CreatedAt)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "error creating track")
 		return
 	}
-
-	respondJSON(w, http.StatusCreated, track)
+	respondJSON(w, http.StatusCreated, t)
 }
 
-func (h *TracksHandler) IncrementPlay(w http.ResponseWriter, r *http.Request) {
-	trackID := chi.URLParam(r, "id")
-	h.db.Pool.Exec(r.Context(), `UPDATE tracks SET play_count = play_count + 1 WHERE id=$1`, trackID)
-	respondJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
-func (h *TracksHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	role, _ := r.Context().Value(middleware.UserRoleKey).(string)
+// PUT /api/tracks/:id
+func (h *TracksHandler) Update(w http.ResponseWriter, r *http.Request) {
 	userID, _ := r.Context().Value(middleware.UserIDKey).(string)
-	trackID := chi.URLParam(r, "id")
+	role, _ := r.Context().Value(middleware.UserRoleKey).(string)
+	id := chi.URLParam(r, "id")
 
-	var artistID string
-	h.db.Pool.QueryRow(r.Context(), `SELECT artist_id FROM tracks WHERE id=$1`, trackID).Scan(&artistID)
-
-	if artistID != userID && role != "admin" {
+	var ownerID string
+	h.db.Pool.QueryRow(r.Context(), `SELECT artist_id FROM tracks WHERE id=$1`, id).Scan(&ownerID)
+	if ownerID != userID && role != "admin" {
 		respondError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
-	h.db.Pool.Exec(r.Context(), `DELETE FROM tracks WHERE id=$1`, trackID)
+	var req models.CreateTrackRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+
+	var t models.Track
+	err := h.db.Pool.QueryRow(r.Context(),
+		`UPDATE tracks SET
+			title=COALESCE(NULLIF($1,''),title),
+			album=$2, genre=$3, duration=$4,
+			file_url=COALESCE(NULLIF($5,''),file_url),
+			cover_url=$6, released_at=$7
+		 WHERE id=$8
+		 RETURNING id,title,artist_id,album,genre,duration,file_url,cover_url,play_count,released_at,created_at`,
+		req.Title, req.Album, req.Genre, req.Duration, req.FileURL, req.CoverURL, req.ReleasedAt, id,
+	).Scan(&t.ID, &t.Title, &t.ArtistID, &t.Album, &t.Genre, &t.Duration,
+		&t.FileURL, &t.CoverURL, &t.PlayCount, &t.ReleasedAt, &t.CreatedAt)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "error updating track")
+		return
+	}
+	respondJSON(w, http.StatusOK, t)
+}
+
+// POST /api/tracks/:id/play
+func (h *TracksHandler) IncrementPlay(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	h.db.Pool.Exec(r.Context(), `UPDATE tracks SET play_count=play_count+1 WHERE id=$1`, id)
+	respondJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// DELETE /api/tracks/:id
+func (h *TracksHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID, _ := r.Context().Value(middleware.UserIDKey).(string)
+	role, _ := r.Context().Value(middleware.UserRoleKey).(string)
+	id := chi.URLParam(r, "id")
+	var artistID string
+	h.db.Pool.QueryRow(r.Context(), `SELECT artist_id FROM tracks WHERE id=$1`, id).Scan(&artistID)
+	if artistID != userID && role != "admin" {
+		respondError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	h.db.Pool.Exec(r.Context(), `DELETE FROM tracks WHERE id=$1`, id)
 	respondJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }

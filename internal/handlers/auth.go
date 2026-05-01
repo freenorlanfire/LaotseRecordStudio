@@ -27,7 +27,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-
 	if req.Username == "" || req.Email == "" || len(req.Password) < 8 {
 		respondError(w, http.StatusBadRequest, "username, email and password (min 8 chars) required")
 		return
@@ -44,7 +43,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		`INSERT INTO users (username, email, password_hash) VALUES ($1,$2,$3)
 		 RETURNING id, username, email, role, avatar_url, bio, created_at`,
 		req.Username, req.Email, string(hash),
-	).Scan(&user.ID, &user.Username, &user.Email, &user.Role, &user.AvatarURL, &user.Bio, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.Role,
+		&user.AvatarURL, &user.Bio, &user.CreatedAt)
 	if err != nil {
 		respondError(w, http.StatusConflict, "username or email already exists")
 		return
@@ -55,7 +55,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "error generating token")
 		return
 	}
-
 	respondJSON(w, http.StatusCreated, models.AuthResponse{Token: token, User: &user})
 }
 
@@ -69,9 +68,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var user models.User
 	err := h.db.Pool.QueryRow(r.Context(),
 		`SELECT id, username, email, password_hash, role, avatar_url, bio, created_at
-		 FROM users WHERE email=$1`,
-		req.Email,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.AvatarURL, &user.Bio, &user.CreatedAt)
+		 FROM users WHERE email=$1`, req.Email,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash,
+		&user.Role, &user.AvatarURL, &user.Bio, &user.CreatedAt)
 	if err != nil {
 		respondError(w, http.StatusUnauthorized, "invalid credentials")
 		return
@@ -87,7 +86,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "error generating token")
 		return
 	}
-
 	respondJSON(w, http.StatusOK, models.AuthResponse{Token: token, User: &user})
 }
 
@@ -96,14 +94,43 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 	var user models.User
 	err := h.db.Pool.QueryRow(r.Context(),
-		`SELECT id, username, email, role, avatar_url, bio, created_at FROM users WHERE id=$1`,
-		userID,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.Role, &user.AvatarURL, &user.Bio, &user.CreatedAt)
+		`SELECT id, username, email, role, avatar_url, bio, created_at
+		 FROM users WHERE id=$1`, userID,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.Role,
+		&user.AvatarURL, &user.Bio, &user.CreatedAt)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "user not found")
 		return
 	}
+	respondJSON(w, http.StatusOK, user)
+}
 
+func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	userID, _ := r.Context().Value(middleware.UserIDKey).(string)
+
+	var body struct {
+		AvatarURL *string `json:"avatar_url"`
+		Bio       *string `json:"bio"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+
+	var user models.User
+	err := h.db.Pool.QueryRow(r.Context(),
+		`UPDATE users SET
+			avatar_url = COALESCE($1, avatar_url),
+			bio        = COALESCE($2, bio)
+		 WHERE id = $3
+		 RETURNING id, username, email, role, avatar_url, bio, created_at`,
+		body.AvatarURL, body.Bio, userID,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.Role,
+		&user.AvatarURL, &user.Bio, &user.CreatedAt)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "error updating profile")
+		return
+	}
 	respondJSON(w, http.StatusOK, user)
 }
 
