@@ -39,6 +39,13 @@ func New(db *database.DB, jwtSecret string) http.Handler {
 	adminOrArtist := middleware.RequireRole("admin", "artist")
 
 	r.Route("/api", func(r chi.Router) {
+		// Health check
+		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"ok","service":"laotse-records-studio"}`))
+		})
+
 		// Auth
 		r.Post("/auth/register", authHandler.Register)
 		r.Post("/auth/login", authHandler.Login)
