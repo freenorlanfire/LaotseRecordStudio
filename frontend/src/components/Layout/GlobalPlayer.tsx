@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Play, Pause, SkipBack, SkipForward,
-  Volume2, VolumeX, ChevronDown,
+  Volume2, VolumeX,
 } from 'lucide-react'
 import { usePlayerStore, useCurrentTrack } from '../../store/playerStore'
 import { formatDuration } from '../../lib/api'
